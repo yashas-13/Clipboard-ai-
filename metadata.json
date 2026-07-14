@@ -1,0 +1,6 @@
+{
+  "name": "Clipboard AI",
+  "description": "An AI-powered clipboard manager that categorizes, securely stores, and enhances your copied content using Gemini AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
