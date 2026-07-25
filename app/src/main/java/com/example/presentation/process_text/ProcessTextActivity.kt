@@ -27,7 +27,7 @@ class ProcessTextActivity : Activity() {
                 applicationContext,
                 AppDatabase::class.java,
                 "clipboard_db"
-            ).fallbackToDestructiveMigration().build()
+            ).fallbackToDestructiveMigration(dropAllTables = true).build()
             val repository = ClipboardRepositoryImpl(db.clipboardDao())
             
             CoroutineScope(Dispatchers.IO).launch {

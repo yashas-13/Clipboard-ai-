@@ -28,21 +28,26 @@ import android.content.Intent
 import android.content.Context
 import android.provider.Settings
 import com.example.presentation.overlay.ClipboardOverlayService
+import com.example.data.worker.ClipboardSyncScheduler
 
 class MainActivity : ComponentActivity() {
   private lateinit var database: AppDatabase
   
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+
+    // Schedule WorkManager periodic sync task for battery-efficient background operation
+    ClipboardSyncScheduler.schedulePeriodicSync(applicationContext)
+    ClipboardSyncScheduler.runOneTimeSync(applicationContext)
     
     database = Room.databaseBuilder(
         applicationContext,
         AppDatabase::class.java,
         "clipboard_db"
-    ).fallbackToDestructiveMigration().build()
+    ).fallbackToDestructiveMigration(dropAllTables = true).build()
     
     val repository = ClipboardRepositoryImpl(database.clipboardDao())
-    val aiRepository = GeminiAiRepositoryImpl()
+    val aiRepository = GeminiAiRepositoryImpl(applicationContext)
     
     enableEdgeToEdge()
     setContent {

@@ -40,8 +40,10 @@ import com.example.data.local.AppDatabase
 import com.example.data.repository.ClipboardRepositoryImpl
 import com.example.data.local.ClipboardItemEntity
 import com.example.data.local.ClipboardClassifier
+import com.example.domain.rules.SmartFolderEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import androidx.room.Room
 import android.provider.Settings
@@ -56,24 +58,30 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
     private var lastSavedText: String = ""
     
     private val clipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
-        if (clipboardManager.hasPrimaryClip()) {
-            val clip = clipboardManager.primaryClip
-            if (clip != null && clip.itemCount > 0) {
-                val item = clip.getItemAt(0)
-                val text = item.text?.toString()
-                val uri = item.uri
-                
-                if (text != null && text.isNotBlank() && text != lastSavedText) {
-                    lastSavedText = text
-                    saveToDatabase(text)
-                } else if (uri != null) {
-                    val uriString = uri.toString()
-                    if (uriString != lastSavedText) {
-                        lastSavedText = uriString
-                        saveToDatabase(uriString)
+        try {
+            if (clipboardManager.hasPrimaryClip()) {
+                val clip = clipboardManager.primaryClip
+                if (clip != null && clip.itemCount > 0) {
+                    val item = clip.getItemAt(0)
+                    val text = item.text?.toString()
+                    val uri = item.uri
+                    
+                    if (text != null && text.isNotBlank() && text != lastSavedText) {
+                        lastSavedText = text
+                        saveToDatabase(text)
+                    } else if (uri != null) {
+                        val uriString = uri.toString()
+                        if (uriString != lastSavedText) {
+                            lastSavedText = uriString
+                            saveToDatabase(uriString)
+                        }
                     }
                 }
             }
+        } catch (e: SecurityException) {
+            android.util.Log.w("ClipboardOverlayService", "Clipboard access denied when not in focus: ${e.message}")
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
     
@@ -82,22 +90,30 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
             applicationContext,
             AppDatabase::class.java,
             "clipboard_db"
-        ).fallbackToDestructiveMigration().build()
+        ).fallbackToDestructiveMigration(dropAllTables = true).build()
         val repository = ClipboardRepositoryImpl(db.clipboardDao())
-        val aiRepository = com.example.data.repository.GeminiAiRepositoryImpl()
+        val aiRepository = com.example.data.repository.GeminiAiRepositoryImpl(this)
         
         scope.launch {
-            val category = ClipboardClassifier.classify(text)
+            val baseCategory = ClipboardClassifier.classify(text)
             val preview = ClipboardClassifier.getPreview(text)
             val wordCount = if (text.isBlank()) 0 else text.split(Regex("\\s+")).filter { it.isNotBlank() }.size
             
+            // Apply Smart Folder Rules & Auto-Tagging
+            val rules = repository.getAllSmartRules().first()
+            val matchResult = SmartFolderEngine.evaluateRules(text, "Auto Fetch", baseCategory, rules)
+
+            val finalCategory = matchResult.matchedFolderName ?: baseCategory
+            val autoTagsStr = matchResult.autoTags.joinToString(", ")
+
             val entity = ClipboardItemEntity(
                 text = text,
-                category = category,
+                category = finalCategory,
                 preview = preview,
                 wordCount = wordCount,
                 charCount = text.length,
-                sourceApp = "Auto Fetch"
+                sourceApp = "Auto Fetch",
+                tags = autoTagsStr
             )
             val insertedId = repository.insertItem(entity)
             
@@ -105,10 +121,11 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
             launch {
                 val result = aiRepository.analyzeClipboardContent(text)
                 result.onSuccess { analysis ->
+                    val combinedTags = (matchResult.autoTags + analysis.tags).toSet().joinToString(", ")
                     val updatedEntity = entity.copy(
                         id = insertedId.toInt(),
-                        category = analysis.category,
-                        tags = analysis.tags.joinToString(", ")
+                        category = matchResult.matchedFolderName ?: analysis.category,
+                        tags = combinedTags
                     )
                     repository.updateItem(updatedEntity)
                 }.onFailure {

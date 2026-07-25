@@ -1,0 +1,24 @@
+--- app/src/main/java/com/example/data/local/ClipboardClassifier.kt
++++ app/src/main/java/com/example/data/local/ClipboardClassifier.kt
+@@ -21,12 +21,17 @@
+         if (trimmed.startsWith("file://") && (lowerTrimmed.endsWith(".png") || lowerTrimmed.endsWith(".jpg") || lowerTrimmed.endsWith(".jpeg") || lowerTrimmed.endsWith(".webp") || lowerTrimmed.endsWith(".gif"))) {
+             return "Image"
+         }
+ 
++        // AI Provider / API Key Check
++        if (trimmed.contains("sk-") || trimmed.matches(Regex("(?i).*api[_-]?key.*")) || trimmed.contains("AIzaSy")) {
++            return "API Key"
++        }
++        
+         // Sensitive information check (API Keys, Tokens, Passwords, etc.)
+         val isSensitive = trimmed.matches(Regex(".*[A-Za-z0-9_-]{32,}.*")) ||
+-                           trimmed.contains("sk-") ||
+-                           trimmed.contains("API_KEY") ||
+                            trimmed.startsWith("eyJ")
+         if (isSensitive) return "Sensitive"
++        
++        if (trimmed.contains("username") && trimmed.contains("password")) {
++            return "Credentials"
++        }
+ 
+         // URL Check

@@ -1,29 +1,48 @@
 package com.example.presentation.dashboard
 
+import android.widget.Toast
 import androidx.compose.animation.*
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -31,6 +50,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.local.ClipboardItemEntity
 import com.example.presentation.clipboard_list.ClipboardViewModel
 import com.example.presentation.clipboard_list.DashboardStats
 import com.example.presentation.clipboard_list.CategoryCount
@@ -41,17 +61,17 @@ import com.example.ui.theme.Slate400
 
 fun getCategoryColor(category: String, isDark: Boolean): Color {
     return when (category) {
-        "Code" -> if (isDark) Color(0xFF38BDF8) else Color(0xFF0369A1)
-        "Sensitive" -> if (isDark) Color(0xFFEF4444) else Color(0xFF991B1B)
-        "URL" -> if (isDark) Color(0xFF93C5FD) else Color(0xFF1D4ED8)
-        "Email" -> if (isDark) Color(0xFF5EEAD4) else Color(0xFF0F766E)
-        "Phone" -> if (isDark) Color(0xFF86EFAC) else Color(0xFF15803D)
-        "OTP" -> if (isDark) Color(0xFFFCD34D) else Color(0xFFB45309)
-        "JSON" -> if (isDark) Color(0xFFF0ABFC) else Color(0xFFA21CAF)
-        "Markdown" -> if (isDark) Color(0xFFC7D2FE) else Color(0xFF4338CA)
-        "Rich Text" -> if (isDark) Color(0xFFF9A8D4) else Color(0xFFBE185D)
-        "Image" -> if (isDark) Color(0xFFC084FC) else Color(0xFF6D28D9)
-        else -> if (isDark) Color(0xFFE2E2E2) else Color(0xFF3B82F6)
+        "Code" -> if (isDark) Color(0xFF38BDF8) else Color(0xFF0284C7)
+        "Sensitive" -> if (isDark) Color(0xFFF87171) else Color(0xFFDC2626)
+        "URL" -> if (isDark) Color(0xFF818CF8) else Color(0xFF4F46E5)
+        "Email" -> if (isDark) Color(0xFF2DD4BF) else Color(0xFF0D9488)
+        "Phone" -> if (isDark) Color(0xFF4ADE80) else Color(0xFF16A34A)
+        "OTP" -> if (isDark) Color(0xFFFBBF24) else Color(0xFFD97706)
+        "JSON" -> if (isDark) Color(0xFFE879F9) else Color(0xFFC026D3)
+        "Markdown" -> if (isDark) Color(0xFFA5B4FC) else Color(0xFF4338CA)
+        "Rich Text" -> if (isDark) Color(0xFFF472B6) else Color(0xFFDB2777)
+        "Image" -> if (isDark) Color(0xFFC084FC) else Color(0xFF9333EA)
+        else -> if (isDark) Color(0xFFFACC15) else Color(0xFFEAB308)
     }
 }
 
@@ -61,187 +81,909 @@ fun UsageDashboardScreen(
     modifier: Modifier = Modifier
 ) {
     val stats by viewModel.stats.collectAsStateWithLifecycle()
+    val isDark = isSystemInDarkTheme()
 
-    if (stats.totalItems == 0) {
-        EmptyDashboardState(modifier)
-    } else {
-        DashboardContent(stats = stats, modifier = modifier)
+    // Cork / Craft Paper Background Box
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(if (isDark) Color(0xFF14131A) else Color(0xFFFAF6EE))
+            .drawBehind {
+                // Draw craft paper grid / grain overlay
+                val gridStep = 40.dp.toPx()
+                val lineColor = if (isDark) Color(0xFF262430) else Color(0xFFEFE8DA)
+                var x = 0f
+                while (x < size.width) {
+                    drawLine(lineColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = 1f)
+                    x += gridStep
+                }
+                var y = 0f
+                while (y < size.height) {
+                    drawLine(lineColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 1f)
+                    y += gridStep
+                }
+            }
+    ) {
+        if (stats.totalItems == 0) {
+            PaperEmptyBoard()
+        } else {
+            PaperBoardDashboardContent(stats = stats, viewModel = viewModel)
+        }
     }
 }
 
 @Composable
-fun EmptyDashboardState(modifier: Modifier = Modifier) {
+fun PaperEmptyBoard() {
+    val isDark = isSystemInDarkTheme()
     Box(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
             .padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+        // Pinned Empty Memo Paper
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .rotate(-1.5f),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isDark) Color(0xFF1E1C26) else Color(0xFFFFFDF9)
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+            border = BorderStroke(1.dp, if (isDark) Color(0xFF333042) else Color(0xFFE8DFC8))
         ) {
-            Box(
+            Column(
                 modifier = Modifier
-                    .size(80.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-                contentAlignment = Alignment.Center
+                    .padding(28.dp)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Icon(
-                    imageVector = Icons.Default.InsertChartOutlined,
-                    contentDescription = null,
-                    tint = PrimaryPurple,
-                    modifier = Modifier.size(40.dp)
+                // Top Tape Strip
+                PaperTapeStrip(modifier = Modifier.align(Alignment.CenterHorizontally))
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(CircleShape)
+                        .background(PrimaryPurpleContainer.copy(alpha = 0.5f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Assessment,
+                        contentDescription = null,
+                        tint = PrimaryPurple,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "Empty Visual Summary Board",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Copy text, links, or code to automatically populate this paper board with frequency charts, category insights, and copy velocity trends.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Slate400,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 18.sp
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                PaperStampBadge(
+                    text = "AWAITING CLIPBOARD DATA",
+                    color = Color(0xFFD97706)
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "No Activity Stats Yet",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+        }
+    }
+}
+
+@Composable
+fun PaperBoardDashboardContent(
+    stats: DashboardStats,
+    viewModel: ClipboardViewModel
+) {
+    var selectedFilterIndex by remember { mutableStateOf(0) }
+    val filterTabs = listOf("Board Overview", "Frequency Trends", "Categories")
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 32.dp, top = 12.dp, start = 16.dp, end = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
+    ) {
+        // Board Paper Header & Index Tabs
+        item {
+            PaperBoardHeader(
+                selectedTab = selectedFilterIndex,
+                onTabSelect = { selectedFilterIndex = it },
+                tabs = filterTabs
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Copy text or URLs to start tracking usage analytics dynamically.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Slate400,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 24.dp)
+        }
+
+        when (selectedFilterIndex) {
+            0 -> {
+                // Board Overview: Sticky Notes + Daily Bar + Category Donut + Top Copied
+                item {
+                    PaperStickyNotesGrid(stats = stats)
+                }
+
+                item {
+                    PaperDailyActivityCard(stats = stats)
+                }
+
+                item {
+                    PaperCategoryBreakdownCard(stats = stats)
+                }
+
+                if (stats.mostCopiedSnippet != null) {
+                    item {
+                        PaperTopCopiedCard(
+                            item = stats.mostCopiedSnippet,
+                            viewModel = viewModel
+                        )
+                    }
+                }
+
+                item {
+                    PaperSourceAppsAndTagsCard(stats = stats)
+                }
+
+                item {
+                    PaperAiSummaryNote(stats = stats)
+                }
+            }
+            1 -> {
+                // Frequency Trends Detail View
+                item {
+                    PaperDailyActivityCard(stats = stats)
+                }
+
+                item {
+                    PaperHourlyFrequencyHeatmapCard(stats = stats)
+                }
+
+                if (stats.mostCopiedSnippet != null) {
+                    item {
+                        PaperTopCopiedCard(
+                            item = stats.mostCopiedSnippet,
+                            viewModel = viewModel
+                        )
+                    }
+                }
+            }
+            2 -> {
+                // Category & Source Breakdown Detail View
+                item {
+                    PaperCategoryBreakdownCard(stats = stats)
+                }
+
+                item {
+                    PaperSourceAppsAndTagsCard(stats = stats)
+                }
+            }
+        }
+    }
+}
+
+// --- Paper Styling Components ---
+
+@Composable
+fun PushPin(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(16.dp)
+            .shadow(2.dp, CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val radius = size.minDimension / 2f
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color(0xFFEF4444), Color(0xFFB91C1C)),
+                    center = Offset(radius * 0.7f, radius * 0.7f),
+                    radius = radius
+                )
+            )
+            // Pin highlight point
+            drawCircle(
+                color = Color.White.copy(alpha = 0.6f),
+                radius = radius * 0.3f,
+                center = Offset(radius * 0.6f, radius * 0.6f)
             )
         }
     }
 }
 
 @Composable
-fun DashboardContent(
-    stats: DashboardStats,
+fun PaperTapeStrip(modifier: Modifier = Modifier) {
+    val isDark = isSystemInDarkTheme()
+    Box(
+        modifier = modifier
+            .width(60.dp)
+            .height(14.dp)
+            .rotate(-2f)
+            .clip(RoundedCornerShape(2.dp))
+            .background(if (isDark) Color(0x33FFFFFF) else Color(0xDDEFE3C3))
+            .border(
+                1.dp,
+                if (isDark) Color(0x22FFFFFF) else Color(0x55D6C5A0),
+                RoundedCornerShape(2.dp)
+            )
+    )
+}
+
+@Composable
+fun PaperStampBadge(
+    text: String,
+    color: Color,
     modifier: Modifier = Modifier
 ) {
-    LazyColumn(
+    Box(
         modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .rotate(-3f)
+            .border(2.dp, color.copy(alpha = 0.8f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
     ) {
-        // Quick Stats Row
-        item {
-            QuickStatsGrid(stats = stats)
-        }
+        Text(
+            text = text,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Black,
+            color = color,
+            letterSpacing = 1.sp
+        )
+    }
+}
 
-        // Daily Activity Chart Card
-        item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("daily_activity_card"),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp)
-                ) {
+// --- Header & Navigation Tabs ---
+
+@Composable
+fun PaperBoardHeader(
+    selectedTab: Int,
+    onTabSelect: (Int) -> Unit,
+    tabs: List<String>
+) {
+    val isDark = isSystemInDarkTheme()
+    Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isDark) Color(0xFF1E1C26) else Color(0xFFFFFDF9)
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+            border = BorderStroke(1.dp, if (isDark) Color(0xFF333042) else Color(0xFFE8DFC8))
+        ) {
+            Box(modifier = Modifier.fillMaxWidth().padding(18.dp)) {
+                PushPin(modifier = Modifier.align(Alignment.TopEnd))
+                Column {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "Daily Activity",
-                            style = MaterialTheme.typography.titleMedium,
+                            text = "📌 VISUAL CLIPBOARD BOARD",
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = PrimaryPurple,
+                            letterSpacing = 1.5.sp
                         )
-                        Icon(
-                            imageVector = Icons.Default.CalendarToday,
-                            contentDescription = null,
-                            tint = PrimaryPurple,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        PaperStampBadge(text = "LIVE INSIGHTS", color = Color(0xFF059669))
                     }
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Total copies recorded over the last 7 days",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Slate400,
-                        modifier = Modifier.padding(bottom = 24.dp)
-                    )
-
-                    DailyActivityBarChart(
-                        dailyStats = stats.dailyStats,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(180.dp)
+                        text = "History Summary & Frequency Analytics",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
         }
 
-        // Category Distribution Card
-        item {
-            Card(
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Tactile Paper Index Tabs
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            tabs.forEachIndexed { index, label ->
+                val isSelected = index == selectedTab
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 4.dp, bottomEnd = 4.dp))
+                        .background(
+                            if (isSelected) {
+                                if (isDark) Color(0xFF2A2636) else Color(0xFFFFFDF9)
+                            } else {
+                                if (isDark) Color(0xFF181620) else Color(0xFFEDE6D8)
+                            }
+                        )
+                        .border(
+                            1.dp,
+                            if (isSelected) PrimaryPurple else (if (isDark) Color(0xFF333042) else Color(0xFFD6C8B0)),
+                            RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 4.dp, bottomEnd = 4.dp)
+                        )
+                        .clickable { onTabSelect(index) }
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = label,
+                        fontSize = 12.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSelected) PrimaryPurple else Slate400,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+// --- Card 1: Sticky Notes Grid ---
+
+@Composable
+fun PaperStickyNotesGrid(stats: DashboardStats) {
+    val isDark = isSystemInDarkTheme()
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Yellow Sticky Note: Clips & Velocity
+        Card(
+            modifier = Modifier
+                .weight(1f)
+                .rotate(-1.8f)
+                .testTag("sticky_note_total"),
+            shape = RoundedCornerShape(8.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isDark) Color(0xFF3B3213) else Color(0xFFFEF9C3)
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+            border = BorderStroke(1.dp, if (isDark) Color(0xFF715F1F) else Color(0xFFFDE047))
+        ) {
+            Box(modifier = Modifier.padding(14.dp)) {
+                PaperTapeStrip(modifier = Modifier.align(Alignment.TopEnd).offset(y = (-6).dp))
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = null,
+                            tint = if (isDark) Color(0xFFFACC15) else Color(0xFFCA8A04),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "TOTAL CLIPS",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isDark) Color(0xFFFDE047) else Color(0xFF854D0E)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "${stats.totalItems}",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Black,
+                        color = if (isDark) Color(0xFFFEF08A) else Color(0xFF713F12)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "⚡ ~${String.format("%.1f", stats.copyVelocityPerDay)} clips/day",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (isDark) Color(0xFFFDE047) else Color(0xFFA16207)
+                    )
+                }
+            }
+        }
+
+        // Pink Sticky Note: Memory & Words
+        Card(
+            modifier = Modifier
+                .weight(1f)
+                .rotate(1.5f)
+                .testTag("sticky_note_words"),
+            shape = RoundedCornerShape(8.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isDark) Color(0xFF3B1E2B) else Color(0xFFFCE7F3)
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+            border = BorderStroke(1.dp, if (isDark) Color(0xFF831843) else Color(0xFFFBCFE8))
+        ) {
+            Box(modifier = Modifier.padding(14.dp)) {
+                PaperTapeStrip(modifier = Modifier.align(Alignment.TopStart).offset(y = (-6).dp))
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.FontDownload,
+                            contentDescription = null,
+                            tint = if (isDark) Color(0xFFF472B6) else Color(0xFFDB2777),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "WORD VOLUME",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isDark) Color(0xFFFBCFE8) else Color(0xFF9D174D)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "${stats.totalWords}",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Black,
+                        color = if (isDark) Color(0xFFFCE7F3) else Color(0xFF831843)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Avg ${stats.averageLength} chars/snippet",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (isDark) Color(0xFFF472B6) else Color(0xFFBE185D)
+                    )
+                }
+            }
+        }
+    }
+}
+
+// --- Card 2: Daily Activity Paper Bar Chart ---
+
+@Composable
+fun PaperDailyActivityCard(stats: DashboardStats) {
+    val isDark = isSystemInDarkTheme()
+    var selectedBarIndex by remember { mutableStateOf<Int?>(null) }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("daily_activity_card"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isDark) Color(0xFF1E1C26) else Color(0xFFFFFDF9)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        border = BorderStroke(1.dp, if (isDark) Color(0xFF333042) else Color(0xFFE8DFC8))
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    PushPin()
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "7-Day Copy Frequency",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Tap any paper bar for precise count",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Slate400
+                        )
+                    }
+                }
+                PaperStampBadge(text = "FREQUENCY", color = PrimaryPurple)
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            val maxCount = stats.dailyStats.maxOfOrNull { it.count } ?: 1
+            val displayMax = if (maxCount == 0) 1 else maxCount
+
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("category_distribution_card"),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    .height(180.dp)
+                    .background(
+                        if (isDark) Color(0xFF171520) else Color(0xFFFAF7F0),
+                        RoundedCornerShape(12.dp)
+                    )
+                    .border(
+                        1.dp,
+                        if (isDark) Color(0xFF282536) else Color(0xFFE8DFC8),
+                        RoundedCornerShape(12.dp)
+                    )
+                    .padding(12.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(20.dp)
+                // Background ruler grid lines
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val lines = 4
+                    val stepY = size.height / lines
+                    for (i in 1 until lines) {
+                        val y = i * stepY
+                        drawLine(
+                            color = if (isDark) Color(0xFF2B283B) else Color(0xFFE5DCC6),
+                            start = Offset(0f, y),
+                            end = Offset(size.width, y),
+                            strokeWidth = 1f,
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f))
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    stats.dailyStats.forEachIndexed { index, day ->
+                        val fraction = day.count.toFloat() / displayMax
+                        val animatedHeightFraction by animateFloatAsState(
+                            targetValue = if (day.count > 0) maxOf(fraction, 0.12f) else 0.04f,
+                            animationSpec = tween(600), label = "BarHeight"
+                        )
+                        val isSelected = selectedBarIndex == index
+
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clickable { selectedBarIndex = if (isSelected) null else index },
+                            verticalArrangement = Arrangement.Bottom,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            if (isSelected || day.count > 0) {
+                                Text(
+                                    text = "${day.count}",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) PrimaryPurple else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                )
+                            }
+
+                            // Paper Bar Strip
+                            Box(
+                                modifier = Modifier
+                                    .width(20.dp)
+                                    .fillMaxHeight(animatedHeightFraction)
+                                    .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
+                                    .background(
+                                        if (isSelected) {
+                                            Brush.verticalGradient(
+                                                colors = listOf(Color(0xFF8B5CF6), Color(0xFF6D28D9))
+                                            )
+                                        } else if (day.count > 0) {
+                                            Brush.verticalGradient(
+                                                colors = listOf(PrimaryPurple, PrimaryPurple.copy(alpha = 0.5f))
+                                            )
+                                        } else {
+                                            SolidColor(if (isDark) Color(0xFF2D2A3A) else Color(0xFFE2D9C5))
+                                        }
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (isSelected) Color.White else Color.Transparent,
+                                        RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp)
+                                    )
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                text = day.dateLabel,
+                                fontSize = 10.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSelected) PrimaryPurple else Slate400,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (selectedBarIndex != null) {
+                val day = stats.dailyStats[selectedBarIndex!!]
+                Spacer(modifier = Modifier.height(12.dp))
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = PrimaryPurpleContainer.copy(alpha = 0.4f),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "Categories",
-                            style = MaterialTheme.typography.titleMedium,
+                            text = "📅 ${day.dateLabel}",
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        Icon(
-                            imageVector = Icons.Default.PieChart,
-                            contentDescription = null,
-                            tint = PrimaryPurple,
-                            modifier = Modifier.size(20.dp)
+                        Text(
+                            text = "${day.count} items recorded",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = PrimaryPurple
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+// --- Card 3: Hourly Activity Heatmap ---
+
+@Composable
+fun PaperHourlyFrequencyHeatmapCard(stats: DashboardStats) {
+    val isDark = isSystemInDarkTheme()
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isDark) Color(0xFF1E1C26) else Color(0xFFFFFDF9)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        border = BorderStroke(1.dp, if (isDark) Color(0xFF333042) else Color(0xFFE8DFC8))
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
                     Text(
-                        text = "Distribution of copied content by category type",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Slate400,
-                        modifier = Modifier.padding(bottom = 20.dp)
+                        text = "Peak Time Distribution",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
+                    Text(
+                        text = "Peak hour slot: ${stats.peakHourLabel}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Slate400
+                    )
+                }
+                PaperStampBadge(text = "24-HR PATTERN", color = Color(0xFF0284C7))
+            }
 
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(24.dp)
-                    ) {
-                        CategoryDonutChart(
-                            stats = stats.categoryStats,
+            Spacer(modifier = Modifier.height(16.dp))
+
+            val maxHourly = stats.hourlyStats.maxOrNull() ?: 1
+            val displayMax = if (maxHourly == 0) 1 else maxHourly
+
+            // 24 Hour Matrix Grid
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    for (h in 0..11) {
+                        val count = stats.hourlyStats[h]
+                        val alpha = if (count > 0) maxOf(0.2f, count.toFloat() / displayMax) else 0.05f
+                        Box(
                             modifier = Modifier
-                                .size(130.dp)
                                 .weight(1f)
-                        )
-
-                        Column(
-                            modifier = Modifier.weight(1.2f),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                .height(28.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(PrimaryPurple.copy(alpha = alpha))
+                                .border(0.5.dp, if (isDark) Color(0xFF38334A) else Color(0xFFE8DFC8), RoundedCornerShape(4.dp)),
+                            contentAlignment = Alignment.Center
                         ) {
-                            stats.categoryStats.take(4).forEach { cat ->
-                                val totalCount = stats.categoryStats.sumOf { it.count }
-                                val percent = if (totalCount > 0) (cat.count * 100) / totalCount else 0
-                                CategoryLegendRow(
-                                    category = cat.category,
-                                    count = cat.count,
-                                    percentage = percent
+                            Text(
+                                text = "${h}h",
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (alpha > 0.5f) Color.White else Slate400
+                            )
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    for (h in 12..23) {
+                        val count = stats.hourlyStats[h]
+                        val alpha = if (count > 0) maxOf(0.2f, count.toFloat() / displayMax) else 0.05f
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(28.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(PrimaryPurple.copy(alpha = alpha))
+                                .border(0.5.dp, if (isDark) Color(0xFF38334A) else Color(0xFFE8DFC8), RoundedCornerShape(4.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "${h}h",
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (alpha > 0.5f) Color.White else Slate400
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- Card 4: Category Breakdown ---
+
+@Composable
+fun PaperCategoryBreakdownCard(stats: DashboardStats) {
+    val isDark = isSystemInDarkTheme()
+    val totalCount = stats.categoryStats.sumOf { it.count }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("category_distribution_card"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isDark) Color(0xFF1E1C26) else Color(0xFFFFFDF9)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        border = BorderStroke(1.dp, if (isDark) Color(0xFF333042) else Color(0xFFE8DFC8))
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        text = "Category Composition",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Saved item categorization breakdown",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Slate400
+                    )
+                }
+                PaperStampBadge(text = "CLASSIFIED", color = Color(0xFF16A34A))
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                // Paper Donut Ring Chart
+                Box(
+                    modifier = Modifier
+                        .size(130.dp)
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val strokeWidth = 16.dp
+                    val strokePx = with(LocalDensity.current) { strokeWidth.toPx() }
+
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val minDim = size.minDimension
+                        val radius = minDim / 2f - strokePx / 2f
+
+                        if (totalCount == 0) {
+                            drawCircle(
+                                color = if (isDark) Color(0xFF2D2A3A) else Color(0xFFE8DFC8),
+                                radius = radius,
+                                style = Stroke(width = strokePx)
+                            )
+                        } else {
+                            var startAngle = -90f
+                            stats.categoryStats.forEach { cat ->
+                                val sweep = (cat.count.toFloat() / totalCount) * 360f
+                                if (sweep > 0f) {
+                                    drawArc(
+                                        color = getCategoryColor(cat.category, isDark),
+                                        startAngle = startAngle,
+                                        sweepAngle = sweep,
+                                        useCenter = false,
+                                        style = Stroke(width = strokePx, cap = StrokeCap.Butt)
+                                    )
+                                    startAngle += sweep
+                                }
+                            }
+                        }
+                    }
+
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "$totalCount",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "ITEMS",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Slate400,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                }
+
+                // Category List Progress Bars
+                Column(
+                    modifier = Modifier.weight(1.3f),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    stats.categoryStats.take(5).forEach { cat ->
+                        val percent = if (totalCount > 0) (cat.count * 100) / totalCount else 0
+                        val catColor = getCategoryColor(cat.category, isDark)
+
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(catColor)
+                                    )
+                                    Text(
+                                        text = cat.category,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                Text(
+                                    text = "${cat.count} ($percent%)",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Slate400
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            // Paper Measuring Tape Meter
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(if (isDark) Color(0xFF2A2738) else Color(0xFFE8DFC8))
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(percent / 100f)
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(catColor)
                                 )
                             }
                         }
@@ -252,320 +994,283 @@ fun DashboardContent(
     }
 }
 
-@Composable
-fun QuickStatsGrid(stats: DashboardStats) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            QuickStatsCard(
-                title = "Total Clips",
-                value = stats.totalItems.toString(),
-                icon = Icons.Default.ContentCopy,
-                color = PrimaryPurple,
-                containerColor = PrimaryPurpleContainer.copy(alpha = 0.4f),
-                modifier = Modifier.weight(1f)
-            )
-            QuickStatsCard(
-                title = "Avg Length",
-                value = "${stats.averageLength} ch",
-                icon = Icons.Default.TextFields,
-                color = Color(0xFF0EA5E9),
-                containerColor = Color(0xFFE0F2FE),
-                modifier = Modifier.weight(1f)
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            QuickStatsCard(
-                title = "Word Count",
-                value = stats.totalWords.toString(),
-                icon = Icons.Default.MenuBook,
-                color = Color(0xFF10B981),
-                containerColor = Color(0xFFD1FAE5),
-                modifier = Modifier.weight(1f)
-            )
-            QuickStatsCard(
-                title = "Total Chars",
-                value = stats.totalChars.toString(),
-                icon = Icons.Default.FontDownload,
-                color = Color(0xFFF59E0B),
-                containerColor = Color(0xFFFEF3C7),
-                modifier = Modifier.weight(1f)
-            )
-        }
-    }
-}
+// --- Card 5: Top Copied Snippet ("Copy Count Champion") ---
 
 @Composable
-fun QuickStatsCard(
-    title: String,
-    value: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    color: Color,
-    containerColor: Color,
-    modifier: Modifier = Modifier
+fun PaperTopCopiedCard(
+    item: ClipboardItemEntity,
+    viewModel: ClipboardViewModel
 ) {
-    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val isDark = isSystemInDarkTheme()
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+
     Card(
-        modifier = modifier.testTag("stats_card_$title"),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        modifier = Modifier
+            .fillMaxWidth()
+            .rotate(-0.8f),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isDark) Color(0xFF1E1C26) else Color(0xFFFFFDF9)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 5.dp),
+        border = BorderStroke(1.dp, if (isDark) Color(0xFF333042) else Color(0xFFE8DFC8))
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(if (isDark) color.copy(alpha = 0.2f) else containerColor),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = if (isDark) color else color,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+        Box(modifier = Modifier.padding(20.dp)) {
+            PushPin(modifier = Modifier.align(Alignment.TopEnd))
+
             Column {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Slate400
-                )
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    PaperStampBadge(text = "👑 MOST COPIED SNIPPET", color = Color(0xFFDC2626))
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = PrimaryPurpleContainer.copy(alpha = 0.4f)
+                    ) {
+                        Text(
+                            text = "Copied ${item.copyCount}x",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryPurple,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
 
-@Composable
-fun DailyActivityBarChart(
-    dailyStats: List<DailyCount>,
-    modifier: Modifier = Modifier
-) {
-    val maxCount = dailyStats.maxOfOrNull { it.count } ?: 0
-    val displayMax = if (maxCount == 0) 1 else maxCount
-    val axisLabelColor = Slate400
-    val density = LocalDensity.current
+                Spacer(modifier = Modifier.height(12.dp))
 
-    Column(modifier = modifier) {
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-        ) {
-            // Horizontal reference lines
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val stepHeight = size.height / 3f
-                for (i in 1..3) {
-                    val y = size.height - (i * stepHeight)
-                    drawLine(
-                        color = Color.Gray.copy(alpha = 0.15f),
-                        start = Offset(0f, y),
-                        end = Offset(size.width, y),
-                        strokeWidth = 1.dp.toPx()
+                // Lined Notebook Snippet Box
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isDark) Color(0xFF171520) else Color(0xFFFBF8F0))
+                        .border(1.dp, if (isDark) Color(0xFF2A2738) else Color(0xFFE8DFC8), RoundedCornerShape(8.dp))
+                        .padding(14.dp)
+                ) {
+                    Text(
+                        text = item.preview.ifBlank { item.text },
+                        fontSize = 13.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
-            }
 
-            // Bars layout
-            Row(
-                modifier = Modifier.fillMaxSize(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom
-            ) {
-                dailyStats.forEachIndexed { index, day ->
-                    val fraction = day.count.toFloat() / displayMax
-                    val fillPercent = if (day.count > 0) maxOf(fraction, 0.08f) else 0f
+                Spacer(modifier = Modifier.height(12.dp))
 
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                        verticalArrangement = Arrangement.Bottom,
-                        horizontalAlignment = Alignment.CenterHorizontally
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Source: ${item.sourceApp} • Category: ${item.category}",
+                        fontSize = 11.sp,
+                        color = Slate400
+                    )
+
+                    Button(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(item.text))
+                            Toast.makeText(context, "Copied snippet to clipboard!", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryPurple),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                     ) {
-                        if (day.count > 0) {
-                            Text(
-                                text = day.count.toString(),
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.padding(bottom = 4.dp)
-                            )
-                        }
-
-                        // Gradient rounded bar
-                        Box(
-                            modifier = Modifier
-                                .width(14.dp)
-                                .fillMaxHeight(fillPercent)
-                                .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
-                                .background(
-                                    Brush.verticalGradient(
-                                        colors = listOf(
-                                            PrimaryPurple,
-                                            PrimaryPurple.copy(alpha = 0.4f)
-                                        )
-                                    )
-                                )
+                        Icon(
+                            Icons.Default.ContentCopy,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
                         )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Copy Again", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // X-Axis labels
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            dailyStats.forEach { day ->
-                Text(
-                    text = day.dateLabel,
-                    fontSize = 10.sp,
-                    color = axisLabelColor,
-                    textAlign = TextAlign.Center,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.weight(1f)
-                )
             }
         }
     }
 }
 
-@Composable
-fun CategoryDonutChart(
-    stats: List<CategoryCount>,
-    modifier: Modifier = Modifier
-) {
-    val total = stats.sumOf { it.count }
-    val strokeWidth = 14.dp
-    val strokeWidthPx = with(LocalDensity.current) { strokeWidth.toPx() }
-    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
-
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val minDim = size.minDimension
-            val ringRadius = minDim / 2f - strokeWidthPx / 2f
-
-            if (total == 0) {
-                // Placeholder grey ring
-                drawCircle(
-                    color = if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0),
-                    radius = ringRadius,
-                    style = Stroke(width = strokeWidthPx)
-                )
-            } else {
-                var startAngle = -90f
-                stats.forEach { item ->
-                    val sweepAngle = (item.count.toFloat() / total) * 360f
-                    if (sweepAngle > 0f) {
-                        drawArc(
-                            color = getCategoryColor(item.category, isDark),
-                            startAngle = startAngle,
-                            sweepAngle = sweepAngle,
-                            useCenter = false,
-                            style = Stroke(width = strokeWidthPx, cap = StrokeCap.Butt)
-                        )
-                        startAngle += sweepAngle
-                    }
-                }
-            }
-        }
-
-        // Inner stats label
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "Total",
-                fontSize = 11.sp,
-                color = Slate400,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                text = total.toString(),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
-    }
-}
+// --- Card 6: Source Apps & Top Tags ---
 
 @Composable
-fun CategoryLegendRow(
-    category: String,
-    count: Int,
-    percentage: Int
-) {
-    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
-    Row(
+fun PaperSourceAppsAndTagsCard(stats: DashboardStats) {
+    val isDark = isSystemInDarkTheme()
+
+    Card(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isDark) Color(0xFF1E1C26) else Color(0xFFFFFDF9)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        border = BorderStroke(1.dp, if (isDark) Color(0xFF333042) else Color(0xFFE8DFC8))
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.weight(1f)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .clip(CircleShape)
-                    .background(getCategoryColor(category, isDark))
-            )
+        Column(modifier = Modifier.padding(20.dp)) {
             Text(
-                text = category,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "$count",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
+                text = "Source Applications",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = "($percentage%)",
-                fontSize = 11.sp,
+                text = "Applications generating saved clipboard items",
+                style = MaterialTheme.typography.bodySmall,
                 color = Slate400
             )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (stats.topSourceApps.isEmpty()) {
+                Text("No source data recorded yet", fontSize = 12.sp, color = Slate400)
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val maxAppCount = stats.topSourceApps.maxOfOrNull { it.second } ?: 1
+                    stats.topSourceApps.forEach { (appName, count) ->
+                        val percent = (count.toFloat() / maxAppCount)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = appName,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1.2f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .weight(2f)
+                                    .height(10.dp)
+                                    .clip(RoundedCornerShape(5.dp))
+                                    .background(if (isDark) Color(0xFF2D2A3A) else Color(0xFFE8DFC8))
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(percent)
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(5.dp))
+                                        .background(PrimaryPurple)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "$count",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Slate400
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (stats.topTags.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(20.dp))
+                Divider(color = if (isDark) Color(0xFF2D2A3A) else Color(0xFFE8DFC8))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "Frequent Tags",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(stats.topTags) { (tag, count) ->
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = PrimaryPurpleContainer.copy(alpha = 0.3f),
+                            border = BorderStroke(0.5.dp, PrimaryPurple.copy(alpha = 0.4f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "#$tag",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PrimaryPurple
+                                )
+                                Text(
+                                    text = "($count)",
+                                    fontSize = 10.sp,
+                                    color = Slate400
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- Card 7: AI / Smart Paper Board Summary Note ---
+
+@Composable
+fun PaperAiSummaryNote(stats: DashboardStats) {
+    val isDark = isSystemInDarkTheme()
+    val topCategory = stats.categoryStats.maxByOrNull { it.count }?.category ?: "General"
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .rotate(1f),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isDark) Color(0xFF262013) else Color(0xFFFEFCE8)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        border = BorderStroke(1.dp, if (isDark) Color(0xFF715F1F) else Color(0xFFFEF08A))
+    ) {
+        Box(modifier = Modifier.padding(18.dp)) {
+            PaperTapeStrip(modifier = Modifier.align(Alignment.TopEnd).offset(y = (-6).dp))
+
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = if (isDark) Color(0xFFFACC15) else Color(0xFFCA8A04),
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "PAPER BOARD ASSISTANT TAKEAWAY",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isDark) Color(0xFFFDE047) else Color(0xFF854D0E),
+                        letterSpacing = 1.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "• Peak activity occurs around ${stats.peakHourLabel}.\n" +
+                           "• Primary category: $topCategory (${stats.categoryStats.find { it.category == topCategory }?.count ?: 0} clips).\n" +
+                           "• Saved ${stats.totalWords} words across ${stats.totalItems} entries with an average clip speed of ~${String.format("%.1f", stats.copyVelocityPerDay)} clips/day.",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isDark) Color(0xFFFEF08A) else Color(0xFF713F12),
+                    lineHeight = 20.sp
+                )
+            }
         }
     }
 }
