@@ -130,6 +130,20 @@ class ClipboardViewModel(
         }
     }
 
+    fun categorizeSelected(category: String) {
+        viewModelScope.launch {
+            val selected = _selectedItemIds.value
+            val allItems = repository.getAllItems().first()
+            selected.forEach { id ->
+                val item = allItems.find { it.id == id }
+                item?.let {
+                    repository.updateItem(it.copy(category = category))
+                }
+            }
+            clearSelection()
+        }
+    }
+
     // Tag filter state
     private val _selectedTagFilter = MutableStateFlow<String?>(null)
     val selectedTagFilter: StateFlow<String?> = _selectedTagFilter.asStateFlow()
@@ -327,10 +341,10 @@ class ClipboardViewModel(
         )
 
     init {
-        // Pre-populate default smart rules if empty
+        // Pre-populate default smart rules and pre-built items if empty
         viewModelScope.launch {
-            val existing = repository.getAllSmartRules().first()
-            if (existing.isEmpty()) {
+            val existingRules = repository.getAllSmartRules().first()
+            if (existingRules.isEmpty()) {
                 repository.insertSmartRule(
                     SmartRuleEntity(
                         ruleName = "Chrome Shopping",
@@ -359,6 +373,89 @@ class ClipboardViewModel(
                         tagsToApply = "#auth, #security"
                     )
                 )
+            }
+
+            val existingItems = repository.getAllItems().first()
+            if (existingItems.isEmpty()) {
+                seedPrebuiltItemsAndRules()
+            }
+        }
+    }
+
+    fun seedPrebuiltItemsAndRules() {
+        viewModelScope.launch {
+            val existing = repository.getAllItems().first()
+            if (existing.isNotEmpty()) return@launch
+
+            val prebuiltClips = listOf(
+                ClipboardItemEntity(
+                    text = "fun calculateTokenCount(text: String): Int = text.split(\" \").size * 2",
+                    category = "Code",
+                    preview = "fun calculateTokenCount(text: String): Int",
+                    sourceApp = "Android Studio",
+                    wordCount = 9,
+                    charCount = 68,
+                    tags = "#kotlin, #dev"
+                ),
+                ClipboardItemEntity(
+                    text = "sk-proj-a89f920192039102938401928301",
+                    category = "Sensitive",
+                    preview = "sk-proj-a89f92019203...",
+                    sourceApp = "Developer Console",
+                    wordCount = 1,
+                    charCount = 36,
+                    tags = "#secret, #apikey",
+                    isPinned = true
+                ),
+                ClipboardItemEntity(
+                    text = "https://developer.android.com/jetpack/compose",
+                    category = "URL",
+                    preview = "https://developer.android.com/jetpack/compose",
+                    sourceApp = "Chrome",
+                    wordCount = 1,
+                    charCount = 45,
+                    tags = "#docs, #android"
+                ),
+                ClipboardItemEntity(
+                    text = "Your verification code is 849201. Do not share with anyone.",
+                    category = "OTP",
+                    preview = "OTP Code: 849201",
+                    sourceApp = "Messages",
+                    wordCount = 10,
+                    charCount = 58,
+                    tags = "#security, #verification"
+                ),
+                ClipboardItemEntity(
+                    text = "Prompt Template: Act as an expert Android engineer and optimize this Jetpack Compose layout for smooth 120Hz scrolling.",
+                    category = "Work",
+                    preview = "Prompt Template: Act as an expert Android engineer...",
+                    sourceApp = "AI Assistant",
+                    wordCount = 18,
+                    charCount = 120,
+                    tags = "#prompt, #ai",
+                    isPinned = true
+                ),
+                ClipboardItemEntity(
+                    text = "John Doe, 123 Innovation Way, Suite 400, San Francisco, CA 94105",
+                    category = "Form Data",
+                    preview = "John Doe, 123 Innovation Way...",
+                    sourceApp = "Browser",
+                    wordCount = 11,
+                    charCount = 65,
+                    tags = "#address, #contact"
+                )
+            )
+
+            prebuiltClips.forEach { item ->
+                repository.insertItem(item)
+            }
+
+            // Seed prebuilt smart groups
+            val existingGroups = repository.getAllGroups().first()
+            if (existingGroups.isEmpty()) {
+                repository.createGroup("Dev & Code", "Code snippets and developer shortcuts")
+                repository.createGroup("AI Prompts", "Templates and saved LLM prompts")
+                repository.createGroup("Security", "Masked tokens and credentials")
             }
         }
     }

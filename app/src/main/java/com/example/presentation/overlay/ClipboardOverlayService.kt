@@ -48,6 +48,16 @@ import kotlinx.coroutines.launch
 import androidx.room.Room
 import android.provider.Settings
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import com.example.MainActivity
+import com.example.R
+import com.example.presentation.widget.ClipboardWidgetProvider
+
 class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
 
     private lateinit var windowManager: WindowManager
@@ -56,32 +66,79 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
     private lateinit var clipboardManager: ClipboardManager
     private val scope = CoroutineScope(Dispatchers.IO)
     private var lastSavedText: String = ""
+
+    companion object {
+        const val CHANNEL_ID = "clipboard_ai_fg_channel"
+        const val NOTIFICATION_ID = 1001
+        const val ACTION_START = "ACTION_START_MONITOR"
+        const val ACTION_STOP = "ACTION_STOP_MONITOR"
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "Clipboard AI Assistant",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Running background foreground service for Clipboard AI smart features"
+            }
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            manager?.createNotificationChannel(channel)
+        }
+    }
+
+    private fun buildForegroundNotification(): Notification {
+        val openIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingOpenIntent = PendingIntent.getActivity(
+            this, 0, openIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val stopIntent = Intent(this, ClipboardOverlayService::class.java).apply {
+            action = ACTION_STOP
+        }
+        val pendingStopIntent = PendingIntent.getService(
+            this, 1, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Clipboard AI Active ✨")
+            .setContentText("Monitoring copied items & smart neural categorizer")
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentIntent(pendingOpenIntent)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .addAction(0, "Open App", pendingOpenIntent)
+            .addAction(0, "Pause", pendingStopIntent)
+            .build()
+    }
     
     private val clipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
         try {
-            if (clipboardManager.hasPrimaryClip()) {
-                val clip = clipboardManager.primaryClip
-                if (clip != null && clip.itemCount > 0) {
-                    val item = clip.getItemAt(0)
-                    val text = item.text?.toString()
-                    val uri = item.uri
-                    
-                    if (text != null && text.isNotBlank() && text != lastSavedText) {
-                        lastSavedText = text
-                        saveToDatabase(text)
-                    } else if (uri != null) {
-                        val uriString = uri.toString()
-                        if (uriString != lastSavedText) {
-                            lastSavedText = uriString
-                            saveToDatabase(uriString)
-                        }
+            val clip = clipboardManager.primaryClip
+            if (clip != null && clip.itemCount > 0) {
+                val item = clip.getItemAt(0)
+                val text = item.text?.toString()
+                val uri = item.uri
+                
+                if (text != null && text.isNotBlank() && text != lastSavedText) {
+                    lastSavedText = text
+                    saveToDatabase(text)
+                } else if (uri != null) {
+                    val uriString = uri.toString()
+                    if (uriString != lastSavedText) {
+                        lastSavedText = uriString
+                        saveToDatabase(uriString)
                     }
                 }
             }
         } catch (e: SecurityException) {
-            android.util.Log.w("ClipboardOverlayService", "Clipboard access denied when not in focus: ${e.message}")
-        } catch (e: Exception) {
-            e.printStackTrace()
+            // Android 10+ restricts background clipboard access when not in focus.
+            // Catching gracefully respects Android OS security policy.
+        } catch (e: Throwable) {
+            // Handle any other runtime clipboard exception safely
         }
     }
     
@@ -101,7 +158,7 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
             
             // Apply Smart Folder Rules & Auto-Tagging
             val rules = repository.getAllSmartRules().first()
-            val matchResult = SmartFolderEngine.evaluateRules(text, "Auto Fetch", baseCategory, rules)
+            val matchResult = SmartFolderEngine.evaluateRules(text, "Foreground Service", baseCategory, rules)
 
             val finalCategory = matchResult.matchedFolderName ?: baseCategory
             val autoTagsStr = matchResult.autoTags.joinToString(", ")
@@ -112,11 +169,14 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
                 preview = preview,
                 wordCount = wordCount,
                 charCount = text.length,
-                sourceApp = "Auto Fetch",
+                sourceApp = "Foreground Monitor",
                 tags = autoTagsStr
             )
             val insertedId = repository.insertItem(entity)
             
+            // Immediately refresh Home Screen App Widget
+            ClipboardWidgetProvider.updateAllWidgets(applicationContext)
+
             // Run background Gemini analysis to refine and extract tags/hashtags
             launch {
                 val result = aiRepository.analyzeClipboardContent(text)
@@ -128,6 +188,7 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
                         tags = combinedTags
                     )
                     repository.updateItem(updatedEntity)
+                    ClipboardWidgetProvider.updateAllWidgets(applicationContext)
                 }.onFailure {
                     it.printStackTrace()
                 }
@@ -141,6 +202,9 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
 
     override fun onCreate() {
         super.onCreate()
+        createNotificationChannel()
+        startForeground(NOTIFICATION_ID, buildForegroundNotification())
+
         savedStateRegistryController.performRestore(null)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
@@ -150,7 +214,7 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
         
         try {
             if (Settings.canDrawOverlays(this)) {
-                // showOverlay() - Disabled automatically showing to prevent AppOps restricted logs
+                // showOverlay()
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -158,6 +222,16 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
         
         clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboardManager.addPrimaryClipChangedListener(clipboardListener)
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        startForeground(NOTIFICATION_ID, buildForegroundNotification())
+        return START_STICKY
     }
 
     private fun showOverlay() {

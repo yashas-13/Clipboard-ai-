@@ -185,11 +185,14 @@ fun FormAssistantScreen(
                     ) {
                         OutlinedButton(
                             onClick = {
-                                clipboardManager.getText()?.text?.let { copiedText ->
-                                    if (copiedText.isNotBlank()) {
-                                        viewModel.updateFormInputText(copiedText)
-                                        Toast.makeText(context, "Pasted form text from clipboard", Toast.LENGTH_SHORT).show()
-                                    }
+                                val copiedText = try {
+                                    clipboardManager.getText()?.text
+                                } catch (e: Throwable) {
+                                    null
+                                }
+                                if (!copiedText.isNullOrBlank()) {
+                                    viewModel.updateFormInputText(copiedText)
+                                    Toast.makeText(context, "Pasted form text from clipboard", Toast.LENGTH_SHORT).show()
                                 }
                             },
                             shape = RoundedCornerShape(12.dp)

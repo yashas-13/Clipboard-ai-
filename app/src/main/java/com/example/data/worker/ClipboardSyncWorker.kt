@@ -91,42 +91,7 @@ class ClipboardSyncWorker(
                 }
             }
 
-            // 3. Try reading system clipboard safely in background if permitted
-            try {
-                val clipboardManager = appContext.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                if (clipboardManager != null && clipboardManager.hasPrimaryClip()) {
-                    val clip = clipboardManager.primaryClip
-                    if (clip != null && clip.itemCount > 0) {
-                        val clipText = clip.getItemAt(0).text?.toString()
-                        if (!clipText.isNullOrBlank()) {
-                            val existing = allItems.find { it.text == clipText }
-                            if (existing == null) {
-                                val category = ClipboardClassifier.classify(clipText)
-                                val preview = if (clipText.length > 100) clipText.take(100) + "..." else clipText
-                                val autoTags = SmartFolderEngine.generateAutoTags(
-                                    ClipboardItemEntity(text = clipText, category = category, preview = preview, sourceApp = "Background Sync")
-                                ).joinToString(",")
-
-                                val newItem = ClipboardItemEntity(
-                                    text = clipText,
-                                    category = category,
-                                    tags = autoTags,
-                                    preview = preview,
-                                    timestamp = System.currentTimeMillis(),
-                                    sourceApp = "Background Sync"
-                                )
-                                dao.insertItem(newItem)
-                                Log.d(TAG, "New clipboard item synced from background!")
-                            }
-                        }
-                    }
-                }
-            } catch (e: SecurityException) {
-                Log.w(TAG, "Background clipboard access restricted by Android OS: ${e.message}")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error checking system clipboard: ${e.message}")
-            }
-
+            // 3. Perform background database maintenance and rule optimization safely
             Log.d(TAG, "Background sync completed successfully. Updated $updatedCount items.")
             Result.success()
         } catch (e: Exception) {

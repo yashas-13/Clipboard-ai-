@@ -30,6 +30,15 @@ import android.provider.Settings
 import com.example.presentation.overlay.ClipboardOverlayService
 import com.example.data.worker.ClipboardSyncScheduler
 
+import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import com.example.data.local.ClipboardItemEntity
+import com.example.data.local.ClipboardClassifier
+import com.example.presentation.widget.ClipboardWidgetProvider
+
 class MainActivity : ComponentActivity() {
   private lateinit var database: AppDatabase
   
@@ -64,8 +73,10 @@ class MainActivity : ComponentActivity() {
             OnboardingScreen(onFinish = {
                 sharedPrefs.edit().putBoolean("show_onboarding", false).apply()
                 showOnboarding = false
+                viewModel.seedPrebuiltItemsAndRules()
                 try {
-                    startService(Intent(this@MainActivity, ClipboardOverlayService::class.java))
+                    val intent = Intent(this@MainActivity, ClipboardOverlayService::class.java)
+                    ContextCompat.startForegroundService(this@MainActivity, intent)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
@@ -73,7 +84,8 @@ class MainActivity : ComponentActivity() {
         } else {
             LaunchedEffect(Unit) {
                 try {
-                    startService(Intent(this@MainActivity, ClipboardOverlayService::class.java))
+                    val intent = Intent(this@MainActivity, ClipboardOverlayService::class.java)
+                    ContextCompat.startForegroundService(this@MainActivity, intent)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
@@ -88,6 +100,44 @@ class MainActivity : ComponentActivity() {
             )
         }
       }
+    }
+  }
+
+  override fun onResume() {
+    super.onResume()
+    checkAndSyncClipboardOnFocus()
+  }
+
+  private fun checkAndSyncClipboardOnFocus() {
+    try {
+      val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+      if (clipboardManager != null && clipboardManager.hasPrimaryClip()) {
+        val clip = clipboardManager.primaryClip
+        if (clip != null && clip.itemCount > 0) {
+          val clipText = clip.getItemAt(0).text?.toString()
+          if (!clipText.isNullOrBlank()) {
+            CoroutineScope(Dispatchers.IO).launch {
+              val dao = database.clipboardDao()
+              val all = dao.getAllItems().first()
+              if (all.none { it.text == clipText }) {
+                val category = ClipboardClassifier.classify(clipText)
+                val preview = ClipboardClassifier.getPreview(clipText)
+                val item = ClipboardItemEntity(
+                  text = clipText,
+                  category = category,
+                  preview = preview,
+                  timestamp = System.currentTimeMillis(),
+                  sourceApp = "Clipboard Auto-Detect"
+                )
+                dao.insertItem(item)
+                ClipboardWidgetProvider.updateAllWidgets(applicationContext)
+              }
+            }
+          }
+        }
+      }
+    } catch (e: Exception) {
+      e.printStackTrace()
     }
   }
 }

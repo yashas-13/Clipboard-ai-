@@ -62,6 +62,21 @@
                 android:name="android.view.im"
                 android:resource="@xml/method" />
         </service>
+
+        <!-- Home Screen App Widget -->
+        <receiver
+            android:name=".presentation.widget.ClipboardWidgetProvider"
+            android:exported="true"
+            android:label="Clipboard AI Quick Widget">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.ACTION_TRIGGER_AI_CLEAN" />
+                <action android:name="com.example.ACTION_REFRESH_WIDGET" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/clipboard_widget_info" />
+        </receiver>
     </application>
 
 </manifest>

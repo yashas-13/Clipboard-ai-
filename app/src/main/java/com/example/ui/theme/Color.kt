@@ -26,9 +26,13 @@ val BlueBackground = Color(0xFFEFF6FF)
 val EmeraldAccent = Color(0xFF34D399)
 val EmeraldBackground = Color(0x3334D399) // Emerald-500/20
 
+val Slate200 = Color(0xFFE2E8F0)
 val Slate400 = Color(0xFF94A3B8)
 val Slate600 = Color(0xFF475569)
 val Slate700 = Color(0xFF334155)
+
+val SunsetOrange = Color(0xFFF97316)
+val OceanBlue = Color(0xFF0284C7)
 
 val CodeCardBackground = Color(0xFF1C1B1F)
 val CodeText = Color(0xFF34D399)

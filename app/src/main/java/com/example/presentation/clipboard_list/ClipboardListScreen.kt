@@ -192,6 +192,82 @@ fun ClipboardListScreen(
         )
     }
 
+    // Bulk Categorize Dialog
+    if (showCategorizeDialog) {
+        val defaultCategories = listOf("Code", "Sensitive", "URL", "Email", "OTP", "Form Data", "Work", "Personal", "General")
+        var customCategory by remember { mutableStateOf("") }
+        var selectedCategory by remember { mutableStateOf("General") }
+
+        AlertDialog(
+            onDismissRequest = { showCategorizeDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Folder, contentDescription = null, tint = PrimaryPurple)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Categorize Selected Items", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        "Set a category for ${selectedItemIds.size} selected item${if (selectedItemIds.size > 1) "s" else ""}:",
+                        fontSize = 13.sp,
+                        color = Slate400
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                    ) {
+                        items(defaultCategories) { cat ->
+                            FilterChip(
+                                selected = selectedCategory == cat && customCategory.isBlank(),
+                                onClick = {
+                                    selectedCategory = cat
+                                    customCategory = ""
+                                },
+                                label = { Text(cat) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = PrimaryPurple,
+                                    selectedLabelColor = Color.White
+                                )
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = customCategory,
+                        onValueChange = { customCategory = it },
+                        label = { Text("Or enter custom category name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val finalCategory = customCategory.trim().ifBlank { selectedCategory }
+                        val count = selectedItemIds.size
+                        viewModel.categorizeSelected(finalCategory)
+                        Toast.makeText(context, "Categorized $count item${if (count > 1) "s" else ""} as $finalCategory", Toast.LENGTH_SHORT).show()
+                        showCategorizeDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryPurple)
+                ) {
+                    Text("Apply Category")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCategorizeDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             if (selectedTab == 0) {
@@ -205,12 +281,32 @@ fun ClipboardListScreen(
                                 }
                             },
                             actions = {
-                                IconButton(onClick = { viewModel.deleteSelected() }) {
-                                    Icon(Icons.Filled.Delete, contentDescription = "Delete selected")
+                                IconButton(onClick = {
+                                    val visibleIds = items.map { it.id }
+                                    if (selectedItemIds.size == visibleIds.size && visibleIds.isNotEmpty()) {
+                                        viewModel.clearSelection()
+                                    } else {
+                                        viewModel.selectAll(visibleIds)
+                                    }
+                                }) {
+                                    Icon(
+                                        imageVector = if (selectedItemIds.size == items.size && items.isNotEmpty()) Icons.Filled.SelectAll else Icons.Filled.SelectAll,
+                                        contentDescription = "Select or deselect all"
+                                    )
+                                }
+                                IconButton(onClick = { showCategorizeDialog = true }) {
+                                    Icon(Icons.Filled.Folder, contentDescription = "Categorize selected", tint = PrimaryPurple)
+                                }
+                                IconButton(onClick = {
+                                    val count = selectedItemIds.size
+                                    viewModel.deleteSelected()
+                                    Toast.makeText(context, "Deleted $count item${if (count > 1) "s" else ""}", Toast.LENGTH_SHORT).show()
+                                }) {
+                                    Icon(Icons.Filled.Delete, contentDescription = "Delete selected", tint = MaterialTheme.colorScheme.error)
                                 }
                             },
                             colors = TopAppBarDefaults.topAppBarColors(
-                                containerColor = MaterialTheme.colorScheme.background
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
                             )
                         )
                     } else {
@@ -423,10 +519,64 @@ fun ClipboardListScreen(
             }
         },
         bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                tonalElevation = 8.dp
-            ) {
+            if (selectedItemIds.isNotEmpty() && selectedTab == 0) {
+                Surface(
+                    tonalElevation = 8.dp,
+                    shadowElevation = 8.dp,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = {
+                                val visibleIds = items.map { it.id }
+                                if (selectedItemIds.size == visibleIds.size && visibleIds.isNotEmpty()) {
+                                    viewModel.clearSelection()
+                                } else {
+                                    viewModel.selectAll(visibleIds)
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Filled.SelectAll, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(if (selectedItemIds.size == items.size && items.isNotEmpty()) "Deselect" else "Select All")
+                        }
+
+                        Button(
+                            onClick = { showCategorizeDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryPurple),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Filled.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Categorize (${selectedItemIds.size})")
+                        }
+
+                        Button(
+                            onClick = {
+                                val count = selectedItemIds.size
+                                viewModel.deleteSelected()
+                                Toast.makeText(context, "Deleted $count item${if (count > 1) "s" else ""}", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Delete")
+                        }
+                    }
+                }
+            } else {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    tonalElevation = 8.dp
+                ) {
                 NavigationBarItem(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
@@ -493,17 +643,29 @@ fun ClipboardListScreen(
                 )
             }
         }
+    }
     ) { padding ->
-        when (selectedTab) {
-            0 -> {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                        .background(MaterialTheme.colorScheme.background),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .widthIn(max = 920.dp)
+                    .align(Alignment.TopCenter)
+            ) {
+                when (selectedTab) {
+                    0 -> {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.background),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
                     item {
                         val autoSuggestOptions = remember(inputText, systemClipText, items) {
                             viewModel.getAutoSuggestOptions(inputText, systemClipText)
@@ -568,7 +730,11 @@ fun ClipboardListScreen(
                                     IconButton(
                                         onClick = {
                                             val textToSave = inputText.ifBlank {
-                                                clipboardManager.getText()?.text ?: ""
+                                                try {
+                                                    clipboardManager.getText()?.text ?: ""
+                                                } catch (e: Throwable) {
+                                                    ""
+                                                }
                                             }
                                             if (textToSave.isNotBlank()) {
                                                 viewModel.addManualItem(textToSave)
@@ -725,23 +891,25 @@ fun ClipboardListScreen(
                     }
                 }
             }
-            1 -> {
-                FormAssistantScreen(
-                    viewModel = viewModel,
-                    modifier = Modifier.padding(padding)
-                )
-            }
-            2 -> {
-                RagStudioTab(
-                    viewModel = viewModel,
-                    modifier = Modifier.padding(padding)
-                )
-            }
-            3 -> {
-                UsageDashboardScreen(
-                    viewModel = viewModel,
-                    modifier = Modifier.padding(padding)
-                )
+                    1 -> {
+                        FormAssistantScreen(
+                            viewModel = viewModel,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    2 -> {
+                        RagStudioTab(
+                            viewModel = viewModel,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    3 -> {
+                        UsageDashboardScreen(
+                            viewModel = viewModel,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
             }
         }
     }
